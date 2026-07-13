@@ -26,7 +26,7 @@ by the Codex project's 5H / 7D / SESSION / MODEL design):
 |---|---|---|---|
 | **5-hour block** | `5H ████░░░░ 52% $72.89 ⏳1h33` | **real plan quota %** (from the same OAuth usage API `/usage` uses) · block cost · time until reset | 30 s |
 | **7-day window** | `7D █░░░░ 11% $394` | **real weekly quota %** · rolling 7-day cost | 5 min |
-| **Session / model** | `✳ fable-5 ███░ 161K/200K` | current model · conversation context used vs window (set `CLAUDE_CONTEXT_WINDOW` if yours isn't 200k) | 30 s |
+| **Session / model** | `✳ fable-5 ██░░ 220K/500K` | current model · conversation context used vs window (auto-scales 200k→500k→1M; `CLAUDE_CONTEXT_WINDOW` overrides) | 30 s |
 
 **Tap either button** to open a live dashboard in Terminal — recent 5-hour
 blocks with burn rate and projections, auto-refreshing every 5 seconds.
@@ -88,7 +88,8 @@ The installer:
    folder, or symlinks into your existing plugin folder if you already use
    SwiftBar),
 6. copies the desktop widget into Übersicht's widgets folder,
-7. (re)starts MTMR, SwiftBar and Übersicht.
+7. registers LaunchAgents so all three apps start at login,
+8. (re)starts MTMR, SwiftBar and Übersicht.
 
 Re-run the installer after pulling updates — it redeploys the runtime.
 
@@ -154,7 +155,9 @@ cached for 60 s.
 ## Uninstall
 
 ```bash
-pkill -x MTMR; pkill -x SwiftBar
+pkill -x MTMR; pkill -x SwiftBar; pkill -x "Übersicht"
+launchctl unload ~/Library/LaunchAgents/com.claude-status-touch-bar.*.plist
+rm ~/Library/LaunchAgents/com.claude-status-touch-bar.*.plist
 cp ~/Library/Application\ Support/MTMR/items.json.bak \
    ~/Library/Application\ Support/MTMR/items.json   # restore old config
 brew uninstall --cask mtmr swiftbar ubersicht       # optional

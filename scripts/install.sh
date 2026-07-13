@@ -57,6 +57,33 @@ else
   ln -sf "$RUNTIME/swiftbar/claude-status.30s.sh" "$EXISTING/claude-status.30s.sh"
 fi
 
+echo "==> Registering login items (LaunchAgents) so widgets survive reboots"
+LA="$HOME/Library/LaunchAgents"
+mkdir -p "$LA"
+register_login_item() { # $1 = app name, $2 = slug
+  local plist="$LA/com.claude-status-touch-bar.$2.plist"
+  cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.claude-status-touch-bar.$2</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-gja</string>
+    <string>$1</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+PLIST
+  launchctl load -w "$plist" 2>/dev/null || true
+}
+register_login_item "MTMR" "mtmr"
+register_login_item "SwiftBar" "swiftbar"
+register_login_item "Übersicht" "ubersicht"
+
 echo "==> (Re)starting MTMR, SwiftBar and Übersicht"
 pkill -x MTMR 2>/dev/null || true
 pkill -x SwiftBar 2>/dev/null || true

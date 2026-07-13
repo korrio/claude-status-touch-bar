@@ -216,7 +216,11 @@ try {
       console.log('✳ no session');
       process.exit(0);
     }
-    const win = Number(process.env.CLAUDE_CONTEXT_WINDOW || 200000);
+    // Window size: env override, else the smallest known tier that fits the
+    // observed usage (200k default; long-context sessions bump to 500k/1M).
+    const TIERS = [200000, 500000, 1000000];
+    let win = Number(process.env.CLAUDE_CONTEXT_WINDOW || 0);
+    if (!win) win = TIERS.find((t) => (used || 0) <= t) || TIERS[TIERS.length - 1];
     const parts = ['✳', model || '?'];
     if (used != null) {
       parts.push(fmtBar(used / win, 4), `${fmtTokens(used)}/${fmtTokens(win)}`);
@@ -252,15 +256,18 @@ try {
     const q = fetchQuota();
     const L = [];
     if (block) {
-      const mins = Math.max(0, Math.round((new Date(block.endTime) - Date.now()) / 60000));
-      const reset = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
+      // Prefer the API's reset time; ccusage's block boundary can drift a
+      // few minutes from the real quota window.
+      const resetIso =
+        q && q.fiveHour && q.fiveHour.resetsAt ? q.fiveHour.resetsAt : block.endTime;
+      const reset = fmtMins(minsUntil(resetIso));
       const pct =
         q && q.fiveHour && q.fiveHour.pct != null
           ? `${Math.round(q.fiveHour.pct)}% · `
           : '';
       L.push(`✳ ${pct}${fmtCost(block.costUSD)} ⏳${reset}`);
       L.push('---');
-      const end = new Date(block.endTime);
+      const end = new Date(resetIso);
       const hhmm = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
       L.push(`5-hour block — resets ${hhmm} (in ${reset})`);
       L.push(`${fmtCost(block.costUSD)} · ${fmtTokens(block.totalTokens)} tokens`);
