@@ -67,8 +67,6 @@ const widgets = [
 const defaultPreset = [
   { type: 'escape', width: 110 },
   { type: 'dock', align: 'left' },
-  { type: 'brightness', align: 'right', width: 100 },
-  { type: 'volume', align: 'right', width: 100 },
   { type: 'timeButton', formatTemplate: 'HH:mm', align: 'right' },
 ];
 
