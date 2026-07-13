@@ -52,6 +52,78 @@ function fmtBar(frac, width) {
   return '█'.repeat(filled) + '░'.repeat(width - filled);
 }
 
+// --- Real plan quota, from the same OAuth usage API /usage uses ---
+
+function readOAuthToken() {
+  // Linux / older installs keep a credentials file; macOS uses the Keychain.
+  try {
+    const j = JSON.parse(
+      fs.readFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), 'utf8')
+    );
+    const t = (j.claudeAiOauth || j).accessToken;
+    if (t) return t;
+  } catch {}
+  try {
+    const out = execFileSync(
+      '/usr/bin/security',
+      ['find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+      { encoding: 'utf8', timeout: 5000 }
+    );
+    const j = JSON.parse(out);
+    return (j.claudeAiOauth || j).accessToken || null;
+  } catch {}
+  return null;
+}
+
+// Fetches 5h/7d utilization + reset times. Cached 60s; the token is only
+// ever sent to api.anthropic.com and never written to disk. Returns null on
+// any failure so callers can fall back to local-log estimates.
+function fetchQuota() {
+  const cacheFile = path.join(os.homedir(), '.cache', 'claude-touchbar', 'quota.json');
+  try {
+    if (Date.now() - fs.statSync(cacheFile).mtimeMs < 60000) {
+      return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+    }
+  } catch {}
+  const token = readOAuthToken();
+  if (!token) return null;
+  try {
+    const out = execFileSync(
+      '/usr/bin/curl',
+      [
+        '-s', '-m', '10',
+        'https://api.anthropic.com/api/oauth/usage',
+        '-H', `Authorization: Bearer ${token}`,
+        '-H', 'anthropic-beta: oauth-2025-04-20',
+      ],
+      { encoding: 'utf8', timeout: 15000 }
+    );
+    const j = JSON.parse(out);
+    if (!j.five_hour) throw new Error('unexpected response');
+    const quota = {
+      fiveHour: { pct: j.five_hour.utilization, resetsAt: j.five_hour.resets_at },
+      sevenDay: { pct: j.seven_day.utilization, resetsAt: j.seven_day.resets_at },
+      scoped: (j.limits || [])
+        .filter((l) => l.kind === 'weekly_scoped' && l.scope && l.scope.model)
+        .map((l) => ({ model: l.scope.model.display_name, pct: l.percent })),
+    };
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(cacheFile, JSON.stringify(quota));
+    return quota;
+  } catch {
+    // Stale cache beats nothing if the network is down.
+    try { return JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch {}
+    return null;
+  }
+}
+
+function minsUntil(iso) {
+  return Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 60000));
+}
+function fmtMins(mins) {
+  return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
+}
+
 // Tail of the most recently modified session log (sessions can be large).
 function latestSessionTail() {
   try {
@@ -112,10 +184,19 @@ function contextUsage() {
 
 try {
   if (mode === 'block') {
-    // All blocks in one call: the active one plus the historical maximum,
-    // which serves as a self-calibrating stand-in for the plan's 5h limit.
+    const q = fetchQuota();
     const { blocks } = ccusage(['blocks']);
     const b = (blocks || []).find((x) => x.isActive);
+    if (q && q.fiveHour && q.fiveHour.pct != null) {
+      // Real plan quota from the OAuth usage API.
+      const frac = q.fiveHour.pct / 100;
+      const parts = [`5H ${fmtBar(frac, 8)} ${Math.round(q.fiveHour.pct)}%`];
+      if (b) parts.push(fmtCost(b.costUSD));
+      parts.push(`⏳${fmtMins(minsUntil(q.fiveHour.resetsAt))}`);
+      console.log(parts.join(' '));
+      process.exit(0);
+    }
+    // Fallback: % of the largest-ever block, a self-calibrating limit proxy.
     if (!b) {
       console.log('5H ░░░░░░░░ idle');
       process.exit(0);
@@ -125,9 +206,8 @@ try {
     );
     const frac = maxTokens ? Math.min(1, b.totalTokens / maxTokens) : 0;
     const mins = Math.max(0, Math.round((new Date(b.endTime) - Date.now()) / 60000));
-    const reset = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
     console.log(
-      `5H ${fmtBar(frac, 8)} ${Math.round(frac * 100)}% ${fmtCost(b.costUSD)} ⏳${reset}`
+      `5H ${fmtBar(frac, 8)} ~${Math.round(frac * 100)}% ${fmtCost(b.costUSD)} ⏳${fmtMins(mins)}`
     );
   } else if (mode === 'context') {
     const model = currentModel(false);
@@ -143,11 +223,18 @@ try {
     }
     console.log(parts.join(' '));
   } else if (mode === 'week') {
+    const q = fetchQuota();
     const since = new Date(Date.now() - 7 * 86400000);
     const ymd =
       since.getFullYear() * 10000 + (since.getMonth() + 1) * 100 + since.getDate();
     const { totals } = ccusage(['daily', '--since', String(ymd)]);
-    console.log(`7D ${fmtCost(totals.totalCost)} · ${fmtTokens(totals.totalTokens)}`);
+    if (q && q.sevenDay && q.sevenDay.pct != null) {
+      console.log(
+        `7D ${fmtBar(q.sevenDay.pct / 100, 5)} ${Math.round(q.sevenDay.pct)}% ${fmtCost(totals.totalCost)}`
+      );
+    } else {
+      console.log(`7D ${fmtCost(totals.totalCost)} · ${fmtTokens(totals.totalTokens)}`);
+    }
   } else if (mode === 'menu') {
     // SwiftBar/xbar plugin body: menu bar line, then dropdown after "---".
     let block = null;
@@ -162,11 +249,16 @@ try {
       totals = ccusage(['daily', '--since', String(ymd)]).totals || null;
     } catch {}
 
+    const q = fetchQuota();
     const L = [];
     if (block) {
       const mins = Math.max(0, Math.round((new Date(block.endTime) - Date.now()) / 60000));
       const reset = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
-      L.push(`✳ ${fmtCost(block.costUSD)} ⏳${reset}`);
+      const pct =
+        q && q.fiveHour && q.fiveHour.pct != null
+          ? `${Math.round(q.fiveHour.pct)}% · `
+          : '';
+      L.push(`✳ ${pct}${fmtCost(block.costUSD)} ⏳${reset}`);
       L.push('---');
       const end = new Date(block.endTime);
       const hhmm = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
@@ -184,6 +276,16 @@ try {
       L.push('✳ idle');
       L.push('---');
       L.push('No active 5-hour block');
+    }
+    if (q) {
+      L.push('---');
+      const scoped = (q.scoped || [])
+        .map((s) => ` · ${s.model} ${Math.round(s.pct)}%`)
+        .join('');
+      L.push(
+        `Plan quota: 5H ${Math.round(q.fiveHour.pct)}% · 7D ${Math.round(q.sevenDay.pct)}%${scoped}`
+      );
+      L.push(`Weekly resets ${new Date(q.sevenDay.resetsAt).toLocaleString()}`);
     }
     L.push('---');
     L.push(
@@ -262,6 +364,7 @@ try {
     console.log(
       JSON.stringify({
         generatedAt: now,
+        quota: fetchQuota(),
         bins,
         block: block && {
           cost: block.costUSD,

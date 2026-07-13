@@ -24,8 +24,8 @@ by the Codex project's 5H / 7D / SESSION / MODEL design):
 
 | Segment | Example | Shows | Refresh |
 |---|---|---|---|
-| **5-hour block** | `5H ████░░░░ 45% $48.64 ⏳1h40` | progress bar & % of your largest-ever block (a self-calibrating plan-limit proxy) · block cost · time until reset | 30 s |
-| **7-day window** | `7D $365 · 664.1M` | rolling 7-day cost & tokens | 5 min |
+| **5-hour block** | `5H ████░░░░ 52% $72.89 ⏳1h33` | **real plan quota %** (from the same OAuth usage API `/usage` uses) · block cost · time until reset | 30 s |
+| **7-day window** | `7D █░░░░ 11% $394` | **real weekly quota %** · rolling 7-day cost | 5 min |
 | **Session / model** | `✳ fable-5 ███░ 161K/200K` | current model · conversation context used vs window (set `CLAUDE_CONTEXT_WINDOW` if yours isn't 200k) | 30 s |
 
 **Tap either button** to open a live dashboard in Terminal — recent 5-hour
@@ -116,9 +116,17 @@ SwiftBar plugin (swiftbar/*.30s.sh)    renders it in the menu bar
 Übersicht widget (ubersicht/*.widget)  renders the desktop card + 24h graph
 ```
 
-Everything is computed from Claude Code's **local session logs** — the same
-technique the Codex project uses. Only token counts and timestamps are read;
-no prompts or responses, and nothing leaves your machine.
+Costs and the activity graph are computed from Claude Code's **local session
+logs** — the same technique the Codex project uses. Only token counts and
+timestamps are read; no prompts or responses.
+
+Quota percentages come from **Anthropic's OAuth usage API** (the endpoint the
+in-app `/usage` screen calls), authenticated with the Claude Code login token
+read from the macOS Keychain (or `~/.claude/.credentials.json`). The token is
+only ever sent to `api.anthropic.com`, is never written anywhere, and the
+cached quota file contains just the percentages. If the API is unreachable,
+the widgets fall back to local-log estimates (marked with `~`). Responses are
+cached for 60 s.
 
 ## Customization
 
@@ -172,8 +180,10 @@ docs/README.th.md         Thai documentation
 ## Limitations
 
 - Costs are computed from local logs with public API pricing — close to, but
-  not exactly, the official `/usage` meters, and plan quota **percentages**
-  aren't available locally (Anthropic doesn't expose them offline).
+  not exactly, the official meters. Quota **percentages** are exact (same API
+  as `/usage`); the fallback `~%` estimate is not.
+- The quota endpoint is undocumented and could change without notice; the
+  widgets degrade to local estimates if it does.
 - The model name comes from the tail of the most recently active session log,
   i.e. the last model used anywhere, not per-project.
 - MTMR replaces the system Touch Bar layout; the merged preset keeps

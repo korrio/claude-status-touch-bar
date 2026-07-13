@@ -91,10 +91,16 @@ export const render = ({ output }) => {
     bins.some((b) => b.perFamily[f])
   );
 
-  // Active block progress: elapsed fraction of the 5-hour window.
+  // 5H bar: real plan quota when available, else elapsed time in the block.
+  const q5 = d.quota && d.quota.fiveHour;
   let blockFrac = 0;
   let resetLabel = "";
-  if (d.block) {
+  if (q5 && q5.pct != null) {
+    blockFrac = Math.max(0, Math.min(1, q5.pct / 100));
+    const r = Date.parse(q5.resetsAt);
+    const mins = Math.max(0, Math.round((r - Date.now()) / 60000));
+    resetLabel = `quota ${Math.round(q5.pct)}% · resets ${hhmm(r)} · ${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")} left`;
+  } else if (d.block) {
     const s = Date.parse(d.block.startTime);
     const e = Date.parse(d.block.endTime);
     blockFrac = Math.max(0, Math.min(1, (Date.now() - s) / (e - s)));
@@ -259,7 +265,11 @@ export const render = ({ output }) => {
             color: INK_SECONDARY,
           }}
         >
-          7D&nbsp;&nbsp;{fmtCost(d.week.cost)} · {fmtTok(d.week.tokens)} tokens
+          7D&nbsp;&nbsp;
+          {d.quota && d.quota.sevenDay && d.quota.sevenDay.pct != null
+            ? `${Math.round(d.quota.sevenDay.pct)}% of plan · `
+            : ""}
+          {fmtCost(d.week.cost)} · {fmtTok(d.week.tokens)} tokens
         </div>
       )}
     </div>
