@@ -25,8 +25,8 @@ Two tappable buttons on the right side of the Touch Bar:
 | **5-hour block** | `✳ fable · $20.52 · 23.5M ⏳2h20` | current model · cost & tokens in the active 5-hour billing block · time until the block resets | 30 s |
 | **7-day window** | `7D $337 · 639.4M` | rolling 7-day cost & tokens | 5 min |
 
-**Tap either button** to open a live dashboard in Terminal
-(`ccusage blocks --live`) — burn rate, projections, and per-block history.
+**Tap either button** to open a live dashboard in Terminal — recent 5-hour
+blocks with burn rate and projections, auto-refreshing every 5 seconds.
 
 ## Requirements
 
@@ -116,7 +116,8 @@ rm -rf ~/.cache/claude-touchbar
 scripts/status.js         data collector — ccusage aggregation + model detection
 scripts/claude-status.sh  MTMR entry point with caching (block widget)
 scripts/claude-week.sh    wrapper for the 7-day widget
-scripts/open-live.sh      tap action → live dashboard in Terminal
+scripts/open-live.sh      tap action → opens live.sh in Terminal
+scripts/live.sh           auto-refreshing blocks dashboard (5 s)
 scripts/merge-items.js    idempotent merge into MTMR items.json
 scripts/install.sh        one-shot installer
 docs/README.th.md         Thai documentation

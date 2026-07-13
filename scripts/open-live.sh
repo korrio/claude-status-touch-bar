@@ -1,9 +1,9 @@
 #!/bin/bash
-# Tap action: open a live usage dashboard in Terminal (ccusage blocks --live).
+# Tap action: open a live usage dashboard in Terminal (scripts/live.sh).
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 osascript <<EOF
 tell application "Terminal"
-  do script "cd '$DIR' && ./node_modules/.bin/ccusage blocks --live"
+  do script "'$DIR/scripts/live.sh'"
   activate
 end tell
 EOF

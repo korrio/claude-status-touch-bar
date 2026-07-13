@@ -30,5 +30,5 @@ Done. Notes:
  * First launch: macOS will ask for Accessibility permission for MTMR
    (System Settings > Privacy & Security > Accessibility). Grant it, then
    the custom Touch Bar appears.
- * Tap either widget to open a live dashboard (ccusage blocks --live).
+ * Tap either widget to open a live dashboard in Terminal.
 EOF
