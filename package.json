@@ -1,0 +1,20 @@
+{
+  "name": "claude-status-touch-bar",
+  "version": "1.0.0",
+  "scripts": {
+    "install_widgets": "bash scripts/install.sh",
+    "status": "bash scripts/claude-status.sh"
+  },
+  "keywords": [],
+  "author": "korrio",
+  "license": "MIT",
+  "description": "Live Claude Code usage status on the MacBook Pro Touch Bar (via MTMR + ccusage)",
+  "dependencies": {
+    "ccusage": "^20.0.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/korrio/claude-status-touch-bar.git"
+  },
+  "private": true
+}
