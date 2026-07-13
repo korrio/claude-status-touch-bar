@@ -153,7 +153,7 @@ export const render = ({ output }) => {
             style={{
               position: "absolute",
               top: -2,
-              left: `${(peakIdx / bins.length) * 100}%`,
+              left: `${Math.min(93, Math.max(7, ((peakIdx + 0.5) / bins.length) * 100))}%`,
               transform: "translateX(-50%)",
               fontSize: 9,
               color: INK_MUTED,
