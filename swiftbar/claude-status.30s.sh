@@ -9,4 +9,4 @@
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 #
 # Delegates to the shared status layer (node discovery + 30s cache).
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/claude-status.sh" menu
+exec "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)/scripts/claude-status.sh" menu

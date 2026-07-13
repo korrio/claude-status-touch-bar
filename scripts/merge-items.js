@@ -1,27 +1,46 @@
 #!/usr/bin/env node
-// Merges the Claude widgets into MTMR's items.json, idempotently:
-// removes any previous items pointing at this project, then appends fresh ones.
+// Merges the Claude widgets into MTMR's items.json, idempotently.
+//
+// MTMR executes a source script's *contents* via `bash -c`, so the script
+// cannot locate itself (no BASH_SOURCE). We therefore generate tiny
+// launchers with the runtime path baked in, and point MTMR at those.
+//
+// The runtime lives outside TCC-protected folders (Desktop/Documents/
+// Downloads) so MTMR/SwiftBar can execute it without a Files-and-Folders
+// permission grant — install.sh copies the repo there.
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const PROJECT = path.resolve(__dirname, '..');
+const RUNTIME =
+  process.env.CLAUDE_TOUCH_RUNTIME ||
+  path.join(os.homedir(), '.local', 'share', 'claude-status-touch-bar');
 const MTMR_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'MTMR');
 const ITEMS = path.join(MTMR_DIR, 'items.json');
+const LAUNCHERS = path.join(RUNTIME, 'launchers');
 
+// --- generate launchers (absolute paths, safe under bash -c) ---
+fs.mkdirSync(LAUNCHERS, { recursive: true });
+const statusSh = path.join(RUNTIME, 'scripts', 'claude-status.sh');
+for (const [name, arg] of [['block', 'block'], ['week', 'week']]) {
+  const file = path.join(LAUNCHERS, `${name}.sh`);
+  fs.writeFileSync(file, `#!/bin/bash\nexec "${statusSh}" ${arg}\n`, { mode: 0o755 });
+}
+
+// --- MTMR items ---
 const tapAction = {
   trigger: 'singleTap',
   action: 'shellScript',
   executablePath: '/bin/bash',
-  shellArguments: [path.join(PROJECT, 'scripts', 'open-live.sh')],
+  shellArguments: [path.join(RUNTIME, 'scripts', 'open-live.sh')],
 };
 
 const widgets = [
   {
     type: 'shellScriptTitledButton',
     refreshInterval: 30,
-    source: { filePath: path.join(PROJECT, 'scripts', 'claude-status.sh') },
+    source: { filePath: path.join(LAUNCHERS, 'block.sh') },
     align: 'right',
     bordered: true,
     actions: [tapAction],
@@ -29,7 +48,7 @@ const widgets = [
   {
     type: 'shellScriptTitledButton',
     refreshInterval: 300,
-    source: { filePath: path.join(PROJECT, 'scripts', 'claude-week.sh') },
+    source: { filePath: path.join(LAUNCHERS, 'week.sh') },
     align: 'right',
     bordered: true,
     actions: [tapAction],
@@ -54,11 +73,11 @@ if (fs.existsSync(ITEMS)) {
   items = JSON.parse(raw);
 }
 
-const refersToProject = (item) =>
-  JSON.stringify(item).includes(PROJECT);
-
-items = items.filter((i) => !refersToProject(i));
+// Drop any previous incarnation of our widgets (old repo paths included).
+const OURS = /claude-(status|week|touch)|claude-status-touch-bar/;
+items = items.filter((i) => !OURS.test(JSON.stringify(i)));
 items.push(...widgets);
 
 fs.writeFileSync(ITEMS, JSON.stringify(items, null, 2) + '\n');
 console.log(`Updated ${ITEMS} (${items.length} items, backup at items.json.bak)`);
+console.log(`Launchers in ${LAUNCHERS}`);

@@ -6,7 +6,9 @@
 set -u
 
 MODE="${1:-block}"
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ${BASH_SOURCE[0]:-$0}: MTMR executes script *contents* via bash -c,
+# where BASH_SOURCE is unset and set -u would abort.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 CACHE_DIR="${HOME}/.cache/claude-touchbar"
 CACHE="${CACHE_DIR}/${MODE}.txt"
 TTL=30
@@ -14,14 +16,19 @@ TTL=30
 
 mkdir -p "$CACHE_DIR"
 
-# Pick a node binary: PATH first, then nvm/homebrew fallbacks
-# (MTMR runs scripts with a minimal PATH).
-NODE="$(command -v node || true)"
-if [ -z "$NODE" ]; then
-  for candidate in "$HOME"/.nvm/versions/node/*/bin/node /opt/homebrew/bin/node /usr/local/bin/node; do
-    [ -x "$candidate" ] && NODE="$candidate" && break
-  done
-fi
+# Pick a node binary: PATH first, then nvm/homebrew fallbacks (MTMR and
+# SwiftBar run scripts with their own PATHs). Each candidate is test-run:
+# a broken install (e.g. homebrew node missing its icu4c dylib) must not win.
+NODE=""
+for candidate in "$(command -v node 2>/dev/null || true)" \
+    "$HOME"/.nvm/versions/node/*/bin/node \
+    /opt/homebrew/bin/node /usr/local/bin/node; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ] && \
+     "$candidate" -e 'process.exit(0)' >/dev/null 2>&1; then
+    NODE="$candidate"
+    break
+  fi
+done
 if [ -z "$NODE" ]; then
   echo "✳ no node"
   exit 0

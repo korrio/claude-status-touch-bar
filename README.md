@@ -67,11 +67,17 @@ The installer:
 
 1. installs the `ccusage` npm dependency locally (no globals),
 2. installs MTMR and SwiftBar via Homebrew if they aren't present,
-3. merges the two widgets into `~/Library/Application Support/MTMR/items.json`
+3. deploys a runtime copy to `~/.local/share/claude-status-touch-bar` —
+   MTMR/SwiftBar can't execute scripts inside TCC-protected folders like
+   `~/Desktop` without a permission grant, so the clone location doesn't matter,
+4. merges the two widgets into `~/Library/Application Support/MTMR/items.json`
    — your existing MTMR config is preserved and backed up to `items.json.bak`,
-4. registers the SwiftBar plugin (points SwiftBar at `swiftbar/`, or symlinks
-   into your existing plugin folder if you already use SwiftBar),
-5. (re)starts MTMR and SwiftBar.
+5. registers the SwiftBar plugin (points SwiftBar at the runtime's `swiftbar/`
+   folder, or symlinks into your existing plugin folder if you already use
+   SwiftBar),
+6. (re)starts MTMR and SwiftBar.
+
+Re-run the installer after pulling updates — it redeploys the runtime.
 
 > **First launch:** macOS will ask you to grant MTMR **Accessibility**
 > permission (*System Settings → Privacy & Security → Accessibility*). The
@@ -105,17 +111,19 @@ no prompts or responses, and nothing leaves your machine.
 - **Refresh rates**: edit `refreshInterval` in
   `~/Library/Application Support/MTMR/items.json` and the `TTL` values in
   `scripts/claude-status.sh`.
-- **Text format**: edit `scripts/status.js` (the `block` / `week` branches).
+- **Text format**: edit `scripts/status.js` (the `block` / `week` / `menu`
+  branches).
 - **Tap action**: `scripts/open-live.sh` — point it at anything
   (`claude`, `ccusage daily`, htop…).
-- Re-run `node scripts/merge-items.js` after moving the project directory;
-  it's idempotent and replaces stale entries.
+- After editing, re-run `bash scripts/install.sh` to redeploy the runtime
+  copy; it's idempotent.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Touch Bar unchanged after install | Grant MTMR Accessibility permission, then quit & reopen MTMR |
+| Widgets stuck at `✳ …` or empty | Re-run `bash scripts/install.sh` — old versions ran scripts from the repo folder, which macOS TCC blocks when it's under Desktop/Documents |
 | `✳ no node` on the bar | MTMR runs scripts with a minimal `PATH`; `claude-status.sh` probes nvm/Homebrew locations — add yours if node lives elsewhere |
 | `✳ —` on the bar | `ccusage` failed; run `./node_modules/.bin/ccusage blocks --json --active` in the project dir to see why |
 | Stale numbers | Delete `~/.cache/claude-touchbar/` to force a refresh |
@@ -128,7 +136,7 @@ pkill -x MTMR; pkill -x SwiftBar
 cp ~/Library/Application\ Support/MTMR/items.json.bak \
    ~/Library/Application\ Support/MTMR/items.json   # restore old config
 brew uninstall --cask mtmr swiftbar                 # optional
-rm -rf ~/.cache/claude-touchbar
+rm -rf ~/.cache/claude-touchbar ~/.local/share/claude-status-touch-bar
 ```
 
 ## Project structure
