@@ -24,12 +24,24 @@ else
   echo "==> SwiftBar already installed"
 fi
 
+if [ ! -d "/Applications/Übersicht.app" ]; then
+  echo "==> Installing Übersicht via Homebrew"
+  brew install --cask ubersicht
+else
+  echo "==> Übersicht already installed"
+fi
+
 echo "==> Deploying runtime to $RUNTIME"
 mkdir -p "$RUNTIME"
 rsync -a --delete \
   "$DIR/scripts" "$DIR/swiftbar" "$DIR/node_modules" "$DIR/package.json" \
   "$RUNTIME/"
 chmod +x "$RUNTIME"/scripts/*.sh "$RUNTIME"/swiftbar/*.sh
+
+echo "==> Installing Übersicht desktop widget"
+WIDGETS="$HOME/Library/Application Support/Übersicht/widgets"
+mkdir -p "$WIDGETS"
+rsync -a --delete "$DIR/ubersicht/claude-status.widget" "$WIDGETS/"
 
 echo "==> Merging Claude widgets into MTMR items.json"
 CLAUDE_TOUCH_RUNTIME="$RUNTIME" node "$DIR/scripts/merge-items.js"
@@ -45,12 +57,14 @@ else
   ln -sf "$RUNTIME/swiftbar/claude-status.30s.sh" "$EXISTING/claude-status.30s.sh"
 fi
 
-echo "==> (Re)starting MTMR and SwiftBar"
+echo "==> (Re)starting MTMR, SwiftBar and Übersicht"
 pkill -x MTMR 2>/dev/null || true
 pkill -x SwiftBar 2>/dev/null || true
+pkill -x "Übersicht" 2>/dev/null || true
 sleep 1
 open -a MTMR
 open -a SwiftBar
+open -a "Übersicht"
 
 cat <<'EOF'
 

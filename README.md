@@ -4,9 +4,9 @@ Live **Claude Code** usage status on the MacBook Pro Touch Bar — and in the
 macOS menu bar via SwiftBar.
 
 ```
-┌─────┬──────┐   ┌──────────────────────────────────┬────────────────┐   ┌────┬────┬───────┐
-│ esc │ dock │   │ ✳ fable · $20.52 · 23.5M ⏳2h20  │ 7D $337 · 639M │   │ 🔆 │ 🔊 │ 11:39 │
-└─────┴──────┘   └──────────────────────────────────┴────────────────┘   └────┴────┴───────┘
+┌─────┬──────┐  ┌────────────────────────────┬────────────────┬────────────────────────┐  ┌────┬───────┐
+│ esc │ dock │  │ 5H ████░░░░ 45% $48 ⏳1h40 │ 7D $365 · 664M │ ✳ fable-5 ███░ 161K/200K │  │ 🔊 │ 11:39 │
+└─────┴──────┘  └────────────────────────────┴────────────────┴────────────────────────┘  └────┴───────┘
 ```
 
 Inspired by [codex-status-touch-bar](https://github.com/binlabongbom/codex-status-touch-bar),
@@ -19,12 +19,14 @@ nothing to re-sign after OS updates.
 
 ## What you get
 
-Two tappable buttons on the right side of the Touch Bar:
+Three tappable segments on the right side of the Touch Bar (layout inspired
+by the Codex project's 5H / 7D / SESSION / MODEL design):
 
-| Widget | Example | Shows | Refresh |
+| Segment | Example | Shows | Refresh |
 |---|---|---|---|
-| **5-hour block** | `✳ fable · $20.52 · 23.5M ⏳2h20` | current model · cost & tokens in the active 5-hour billing block · time until the block resets | 30 s |
-| **7-day window** | `7D $337 · 639.4M` | rolling 7-day cost & tokens | 5 min |
+| **5-hour block** | `5H ████░░░░ 45% $48.64 ⏳1h40` | progress bar & % of your largest-ever block (a self-calibrating plan-limit proxy) · block cost · time until reset | 30 s |
+| **7-day window** | `7D $365 · 664.1M` | rolling 7-day cost & tokens | 5 min |
+| **Session / model** | `✳ fable-5 ███░ 161K/200K` | current model · conversation context used vs window (set `CLAUDE_CONTEXT_WINDOW` if yours isn't 200k) | 30 s |
 
 **Tap either button** to open a live dashboard in Terminal — recent 5-hour
 blocks with burn rate and projections, auto-refreshing every 5 seconds.
@@ -46,6 +48,16 @@ Open live dashboard
 Refresh
 ```
 
+### Desktop widget (Übersicht)
+
+A floating desktop card — the equivalent of the Codex project's WidgetKit
+widget, built with [Übersicht](https://tracesof.net/uebersicht/) instead of
+Swift: hero block cost with a 5-hour progress bar, a **24-hour activity graph**
+(48 half-hour bars, stacked and colored per model — fable blue, opus aqua,
+sonnet yellow, haiku red; the palette is colorblind-validated), local-time
+markers, a model legend, and the 7-day footer. It refreshes every minute from
+a 5-minute data cache.
+
 ## Requirements
 
 - MacBook Pro with a Touch Bar
@@ -66,7 +78,7 @@ bash scripts/install.sh
 The installer:
 
 1. installs the `ccusage` npm dependency locally (no globals),
-2. installs MTMR and SwiftBar via Homebrew if they aren't present,
+2. installs MTMR, SwiftBar and Übersicht via Homebrew if they aren't present,
 3. deploys a runtime copy to `~/.local/share/claude-status-touch-bar` —
    MTMR/SwiftBar can't execute scripts inside TCC-protected folders like
    `~/Desktop` without a permission grant, so the clone location doesn't matter,
@@ -75,7 +87,8 @@ The installer:
 5. registers the SwiftBar plugin (points SwiftBar at the runtime's `swiftbar/`
    folder, or symlinks into your existing plugin folder if you already use
    SwiftBar),
-6. (re)starts MTMR and SwiftBar.
+6. copies the desktop widget into Übersicht's widgets folder,
+7. (re)starts MTMR, SwiftBar and Übersicht.
 
 Re-run the installer after pulling updates — it redeploys the runtime.
 
@@ -100,6 +113,7 @@ scripts/claude-status.sh               caches 30s / 5min so the bar never blocks
         ▼
 MTMR shellScriptTitledButton           renders it on the Touch Bar
 SwiftBar plugin (swiftbar/*.30s.sh)    renders it in the menu bar
+Übersicht widget (ubersicht/*.widget)  renders the desktop card + 24h graph
 ```
 
 Everything is computed from Claude Code's **local session logs** — the same
@@ -135,7 +149,8 @@ no prompts or responses, and nothing leaves your machine.
 pkill -x MTMR; pkill -x SwiftBar
 cp ~/Library/Application\ Support/MTMR/items.json.bak \
    ~/Library/Application\ Support/MTMR/items.json   # restore old config
-brew uninstall --cask mtmr swiftbar                 # optional
+brew uninstall --cask mtmr swiftbar ubersicht       # optional
+rm -rf ~/Library/Application\ Support/Übersicht/widgets/claude-status.widget
 rm -rf ~/.cache/claude-touchbar ~/.local/share/claude-status-touch-bar
 ```
 
@@ -150,6 +165,7 @@ scripts/live.sh           auto-refreshing blocks dashboard (5 s)
 scripts/merge-items.js    idempotent merge into MTMR items.json
 scripts/install.sh        one-shot installer
 swiftbar/claude-status.30s.sh  SwiftBar/xbar menu bar plugin
+ubersicht/claude-status.widget/index.jsx  Übersicht desktop widget
 docs/README.th.md         Thai documentation
 ```
 
@@ -168,6 +184,7 @@ docs/README.th.md         Thai documentation
 - [codex-status-touch-bar](https://github.com/binlabongbom/codex-status-touch-bar) — the idea
 - [MTMR](https://github.com/Toxblh/MTMR) — Touch Bar rendering
 - [SwiftBar](https://github.com/swiftbar/SwiftBar) — menu bar rendering
+- [Übersicht](https://tracesof.net/uebersicht/) — desktop widget rendering
 - [ccusage](https://github.com/ryoppippi/ccusage) — Claude Code usage aggregation
 
 ## License

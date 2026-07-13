@@ -2,9 +2,13 @@
 // Collects Claude Code status from local session data (~/.claude/projects)
 // and prints one compact line for the Touch Bar.
 //
-// Usage: node status.js block   -> "✳ fable · $15.63 · 21.0M ⏳2h23"
+// Usage: node status.js block   -> "5H █████░░░ 65% $42 ⏳1h47"
 //        node status.js week    -> "7D $336 · 639M"
+//        node status.js context -> "✳ fable-5 ▓▓▓░ 147K/200K"
 //        node status.js menu    -> full SwiftBar/xbar plugin output
+//        node status.js graph   -> JSON for the Übersicht desktop widget:
+//                                  48 half-hour token bins (24h) per model,
+//                                  plus block/week summaries
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -43,8 +47,13 @@ function fmtCost(c) {
   return '$' + (c >= 100 ? Math.round(c) : c.toFixed(2));
 }
 
-// Current model = last "model" seen in the most recently modified session log.
-function currentModel() {
+function fmtBar(frac, width) {
+  const filled = Math.max(0, Math.min(width, Math.round(frac * width)));
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+// Tail of the most recently modified session log (sessions can be large).
+function latestSessionTail() {
   try {
     const projects = path.join(os.homedir(), '.claude', 'projects');
     let newest = null;
@@ -60,36 +69,78 @@ function currentModel() {
       }
     }
     if (!newest) return '';
-    // Read only the tail of the log; session files can be large.
     const size = fs.statSync(newest.p).size;
     const fd = fs.openSync(newest.p, 'r');
     const len = Math.min(size, 256 * 1024);
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, size - len);
     fs.closeSync(fd);
-    const matches = buf.toString('utf8').match(/"model"\s*:\s*"(claude-[^"]+)"/g);
-    if (!matches) return '';
-    const last = matches[matches.length - 1].match(/"(claude-[^"]+)"/)[1];
-    return last.replace(/^claude-/, '').replace(/-[\d-]+$/, '').split('-')[0];
+    return buf.toString('utf8');
   } catch {
     return '';
   }
 }
 
+// Current model = last "model" seen in the newest session log.
+function currentModel(shorten = true) {
+  const matches = latestSessionTail().match(/"model"\s*:\s*"(claude-[^"]+)"/g);
+  if (!matches) return '';
+  const last = matches[matches.length - 1].match(/"(claude-[^"]+)"/)[1];
+  const name = last.replace(/^claude-/, '').replace(/-\d{8}$/, '');
+  return shorten ? name.split('-')[0] : name;
+}
+
+// Current conversation's context usage from the newest session log's last
+// usage entry: input + cache read + cache creation ≈ tokens in the window.
+function contextUsage() {
+  const lines = latestSessionTail().split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"usage"')) continue;
+    try {
+      const j = JSON.parse(lines[i]); // first line of the tail may be truncated
+      const u = j.message && j.message.usage;
+      if (!u) continue;
+      const used =
+        (u.input_tokens || 0) +
+        (u.cache_read_input_tokens || 0) +
+        (u.cache_creation_input_tokens || 0);
+      if (used > 0) return used;
+    } catch {}
+  }
+  return null;
+}
+
 try {
   if (mode === 'block') {
-    const { blocks } = ccusage(['blocks', '--active']);
-    const b = blocks && blocks[0];
+    // All blocks in one call: the active one plus the historical maximum,
+    // which serves as a self-calibrating stand-in for the plan's 5h limit.
+    const { blocks } = ccusage(['blocks']);
+    const b = (blocks || []).find((x) => x.isActive);
     if (!b) {
-      console.log('✳ idle');
+      console.log('5H ░░░░░░░░ idle');
       process.exit(0);
     }
+    const maxTokens = Math.max(
+      ...(blocks || []).filter((x) => !x.isGap).map((x) => x.totalTokens || 0)
+    );
+    const frac = maxTokens ? Math.min(1, b.totalTokens / maxTokens) : 0;
     const mins = Math.max(0, Math.round((new Date(b.endTime) - Date.now()) / 60000));
     const reset = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
-    const model = currentModel();
-    const parts = ['✳'];
-    if (model) parts.push(model, '·');
-    parts.push(fmtCost(b.costUSD), '·', fmtTokens(b.totalTokens), `⏳${reset}`);
+    console.log(
+      `5H ${fmtBar(frac, 8)} ${Math.round(frac * 100)}% ${fmtCost(b.costUSD)} ⏳${reset}`
+    );
+  } else if (mode === 'context') {
+    const model = currentModel(false);
+    const used = contextUsage();
+    if (!model && used == null) {
+      console.log('✳ no session');
+      process.exit(0);
+    }
+    const win = Number(process.env.CLAUDE_CONTEXT_WINDOW || 200000);
+    const parts = ['✳', model || '?'];
+    if (used != null) {
+      parts.push(fmtBar(used / win, 4), `${fmtTokens(used)}/${fmtTokens(win)}`);
+    }
     console.log(parts.join(' '));
   } else if (mode === 'week') {
     const since = new Date(Date.now() - 7 * 86400000);
@@ -146,10 +197,88 @@ try {
     );
     L.push('Refresh | refresh=true');
     console.log(L.join('\n'));
+  } else if (mode === 'graph') {
+    const BIN_MS = 30 * 60 * 1000;
+    const now = Date.now();
+    const end = Math.ceil(now / BIN_MS) * BIN_MS;
+    const start = end - 48 * BIN_MS;
+    const bins = Array.from({ length: 48 }, (_, i) => ({
+      t: start + i * BIN_MS,
+      models: {},
+    }));
+
+    const projects = path.join(os.homedir(), '.claude', 'projects');
+    const seen = new Set();
+    let dirs = [];
+    try { dirs = fs.readdirSync(projects); } catch {}
+    for (const dir of dirs) {
+      const full = path.join(projects, dir);
+      let files = [];
+      try { files = fs.readdirSync(full); } catch { continue; }
+      for (const f of files) {
+        if (!f.endsWith('.jsonl')) continue;
+        const p = path.join(full, f);
+        let st;
+        try { st = fs.statSync(p); } catch { continue; }
+        if (st.mtimeMs < start) continue; // no entries in our window
+        let lines;
+        try { lines = fs.readFileSync(p, 'utf8').split('\n'); } catch { continue; }
+        for (const line of lines) {
+          if (!line.includes('"usage"')) continue;
+          let j;
+          try { j = JSON.parse(line); } catch { continue; }
+          const ts = Date.parse(j.timestamp);
+          if (!(ts >= start && ts < end)) continue;
+          const u = j.message && j.message.usage;
+          if (!u) continue;
+          const id = `${(j.message && j.message.id) || ''}:${j.requestId || ''}`;
+          if (id !== ':' && seen.has(id)) continue;
+          seen.add(id);
+          const tokens =
+            (u.input_tokens || 0) +
+            (u.output_tokens || 0) +
+            (u.cache_creation_input_tokens || 0) +
+            (u.cache_read_input_tokens || 0);
+          if (!tokens) continue;
+          const model = ((j.message && j.message.model) || 'other')
+            .replace(/^claude-/, '')
+            .replace(/-\d{8}$/, '');
+          const bin = bins[Math.floor((ts - start) / BIN_MS)];
+          bin.models[model] = (bin.models[model] || 0) + tokens;
+        }
+      }
+    }
+
+    let block = null;
+    let totals = null;
+    try { block = (ccusage(['blocks', '--active']).blocks || [])[0] || null; } catch {}
+    try {
+      const since = new Date(now - 7 * 86400000);
+      const ymd =
+        since.getFullYear() * 10000 + (since.getMonth() + 1) * 100 + since.getDate();
+      totals = ccusage(['daily', '--since', String(ymd)]).totals || null;
+    } catch {}
+
+    console.log(
+      JSON.stringify({
+        generatedAt: now,
+        bins,
+        block: block && {
+          cost: block.costUSD,
+          tokens: block.totalTokens,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          projectedCost: block.projection ? block.projection.totalCost : null,
+          models: (block.models || []).map((m) => m.replace(/^claude-/, '')),
+        },
+        week: totals && { cost: totals.totalCost, tokens: totals.totalTokens },
+      })
+    );
   } else {
     console.error(`unknown mode: ${mode}`);
     process.exit(1);
   }
 } catch (e) {
-  console.log(mode === 'week' ? '7D —' : '✳ —');
+  if (mode === 'graph') console.log('{}');
+  else console.log(mode === 'week' ? '7D —' : '✳ —');
 }

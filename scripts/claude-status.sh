@@ -3,6 +3,8 @@
 # Caches output so the Touch Bar never blocks on a slow read.
 #   claude-status.sh block   (default, cached 30s)
 #   claude-status.sh week    (cached 300s)
+#   claude-status.sh menu    (cached 30s)
+#   claude-status.sh graph   (cached 300s)
 set -u
 
 MODE="${1:-block}"
@@ -12,7 +14,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 CACHE_DIR="${HOME}/.cache/claude-touchbar"
 CACHE="${CACHE_DIR}/${MODE}.txt"
 TTL=30
-[ "$MODE" = "week" ] && TTL=300
+case "$MODE" in week|graph) TTL=300 ;; esac
 
 mkdir -p "$CACHE_DIR"
 

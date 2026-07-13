@@ -23,9 +23,9 @@ const LAUNCHERS = path.join(RUNTIME, 'launchers');
 // --- generate launchers (absolute paths, safe under bash -c) ---
 fs.mkdirSync(LAUNCHERS, { recursive: true });
 const statusSh = path.join(RUNTIME, 'scripts', 'claude-status.sh');
-for (const [name, arg] of [['block', 'block'], ['week', 'week']]) {
+for (const name of ['block', 'week', 'context']) {
   const file = path.join(LAUNCHERS, `${name}.sh`);
-  fs.writeFileSync(file, `#!/bin/bash\nexec "${statusSh}" ${arg}\n`, { mode: 0o755 });
+  fs.writeFileSync(file, `#!/bin/bash\nexec "${statusSh}" ${name}\n`, { mode: 0o755 });
 }
 
 // --- MTMR items ---
@@ -49,6 +49,14 @@ const widgets = [
     type: 'shellScriptTitledButton',
     refreshInterval: 300,
     source: { filePath: path.join(LAUNCHERS, 'week.sh') },
+    align: 'right',
+    bordered: true,
+    actions: [tapAction],
+  },
+  {
+    type: 'shellScriptTitledButton',
+    refreshInterval: 30,
+    source: { filePath: path.join(LAUNCHERS, 'context.sh') },
     align: 'right',
     bordered: true,
     actions: [tapAction],
