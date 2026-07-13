@@ -4,20 +4,30 @@
 //
 // Usage: node status.js block   -> "✳ fable · $15.63 · 21.0M ⏳2h23"
 //        node status.js week    -> "7D $336 · 639M"
+//        node status.js menu    -> full SwiftBar/xbar plugin output
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CCUSAGE = path.join(__dirname, '..', 'node_modules', '.bin', 'ccusage');
+// Resolve the .bin symlink and run it with our own node binary: MTMR and
+// SwiftBar spawn plugins with a minimal PATH where `#!/usr/bin/env node`
+// shebangs fail.
+const CCUSAGE = fs.realpathSync(
+  path.join(__dirname, '..', 'node_modules', '.bin', 'ccusage')
+);
 const mode = process.argv[2] || 'block';
 
 function ccusage(args) {
-  const out = execFileSync(CCUSAGE, [...args, '--json'], {
+  const out = execFileSync(process.execPath, [CCUSAGE, ...args, '--json'], {
     encoding: 'utf8',
     timeout: 30000,
-    env: { ...process.env, NO_COLOR: '1' },
+    env: {
+      ...process.env,
+      NO_COLOR: '1',
+      PATH: `${path.dirname(process.execPath)}:${process.env.PATH || '/usr/bin:/bin'}`,
+    },
   });
   return JSON.parse(out);
 }
@@ -87,6 +97,55 @@ try {
       since.getFullYear() * 10000 + (since.getMonth() + 1) * 100 + since.getDate();
     const { totals } = ccusage(['daily', '--since', String(ymd)]);
     console.log(`7D ${fmtCost(totals.totalCost)} · ${fmtTokens(totals.totalTokens)}`);
+  } else if (mode === 'menu') {
+    // SwiftBar/xbar plugin body: menu bar line, then dropdown after "---".
+    let block = null;
+    let totals = null;
+    try {
+      block = (ccusage(['blocks', '--active']).blocks || [])[0] || null;
+    } catch {}
+    try {
+      const since = new Date(Date.now() - 7 * 86400000);
+      const ymd =
+        since.getFullYear() * 10000 + (since.getMonth() + 1) * 100 + since.getDate();
+      totals = ccusage(['daily', '--since', String(ymd)]).totals || null;
+    } catch {}
+
+    const L = [];
+    if (block) {
+      const mins = Math.max(0, Math.round((new Date(block.endTime) - Date.now()) / 60000));
+      const reset = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
+      L.push(`✳ ${fmtCost(block.costUSD)} ⏳${reset}`);
+      L.push('---');
+      const end = new Date(block.endTime);
+      const hhmm = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+      L.push(`5-hour block — resets ${hhmm} (in ${reset})`);
+      L.push(`${fmtCost(block.costUSD)} · ${fmtTokens(block.totalTokens)} tokens`);
+      if (block.burnRate && block.projection) {
+        L.push(
+          `Burn ${fmtCost(block.burnRate.costPerHour)}/h → projected ` +
+            `${fmtCost(block.projection.totalCost)} · ${fmtTokens(block.projection.totalTokens)}`
+        );
+      }
+      const models = (block.models || []).map((m) => m.replace(/^claude-/, ''));
+      if (models.length) L.push(`Models: ${models.join(', ')}`);
+    } else {
+      L.push('✳ idle');
+      L.push('---');
+      L.push('No active 5-hour block');
+    }
+    L.push('---');
+    L.push(
+      totals
+        ? `Last 7 days: ${fmtCost(totals.totalCost)} · ${fmtTokens(totals.totalTokens)} tokens`
+        : 'Last 7 days: —'
+    );
+    L.push('---');
+    L.push(
+      `Open live dashboard | bash="${path.join(__dirname, 'live.sh')}" terminal=true`
+    );
+    L.push('Refresh | refresh=true');
+    console.log(L.join('\n'));
   } else {
     console.error(`unknown mode: ${mode}`);
     process.exit(1);

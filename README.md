@@ -1,6 +1,7 @@
 # Claude Status Touch Bar
 
-Live **Claude Code** usage status on the MacBook Pro Touch Bar.
+Live **Claude Code** usage status on the MacBook Pro Touch Bar — and in the
+macOS menu bar via SwiftBar.
 
 ```
 ┌─────┬──────┐   ┌──────────────────────────────────┬────────────────┐   ┌────┬────┬───────┐
@@ -28,6 +29,23 @@ Two tappable buttons on the right side of the Touch Bar:
 **Tap either button** to open a live dashboard in Terminal — recent 5-hour
 blocks with burn rate and projections, auto-refreshing every 5 seconds.
 
+### Menu bar widget (SwiftBar)
+
+The same status also lives in the menu bar (works on Macs without a Touch
+Bar too): `✳ $27.31 ⏳2h02` with a dropdown showing the full detail —
+
+```
+5-hour block — resets 14:00 (in 2h02)
+$27.31 · 26.9M tokens
+Burn $10.49/h → projected $48.63 · 47.9M
+Models: opus-4-8, fable-5
+---
+Last 7 days: $345 · 647.0M tokens
+---
+Open live dashboard
+Refresh
+```
+
 ## Requirements
 
 - MacBook Pro with a Touch Bar
@@ -48,10 +66,12 @@ bash scripts/install.sh
 The installer:
 
 1. installs the `ccusage` npm dependency locally (no globals),
-2. installs MTMR via `brew install --cask mtmr` if it isn't present,
+2. installs MTMR and SwiftBar via Homebrew if they aren't present,
 3. merges the two widgets into `~/Library/Application Support/MTMR/items.json`
    — your existing MTMR config is preserved and backed up to `items.json.bak`,
-4. (re)starts MTMR.
+4. registers the SwiftBar plugin (points SwiftBar at `swiftbar/`, or symlinks
+   into your existing plugin folder if you already use SwiftBar),
+5. (re)starts MTMR and SwiftBar.
 
 > **First launch:** macOS will ask you to grant MTMR **Accessibility**
 > permission (*System Settings → Privacy & Security → Accessibility*). The
@@ -73,6 +93,7 @@ scripts/claude-status.sh               caches 30s / 5min so the bar never blocks
         │
         ▼
 MTMR shellScriptTitledButton           renders it on the Touch Bar
+SwiftBar plugin (swiftbar/*.30s.sh)    renders it in the menu bar
 ```
 
 Everything is computed from Claude Code's **local session logs** — the same
@@ -103,10 +124,10 @@ no prompts or responses, and nothing leaves your machine.
 ## Uninstall
 
 ```bash
-pkill -x MTMR
+pkill -x MTMR; pkill -x SwiftBar
 cp ~/Library/Application\ Support/MTMR/items.json.bak \
    ~/Library/Application\ Support/MTMR/items.json   # restore old config
-brew uninstall --cask mtmr                          # optional
+brew uninstall --cask mtmr swiftbar                 # optional
 rm -rf ~/.cache/claude-touchbar
 ```
 
@@ -120,6 +141,7 @@ scripts/open-live.sh      tap action → opens live.sh in Terminal
 scripts/live.sh           auto-refreshing blocks dashboard (5 s)
 scripts/merge-items.js    idempotent merge into MTMR items.json
 scripts/install.sh        one-shot installer
+swiftbar/claude-status.30s.sh  SwiftBar/xbar menu bar plugin
 docs/README.th.md         Thai documentation
 ```
 
@@ -137,6 +159,7 @@ docs/README.th.md         Thai documentation
 
 - [codex-status-touch-bar](https://github.com/binlabongbom/codex-status-touch-bar) — the idea
 - [MTMR](https://github.com/Toxblh/MTMR) — Touch Bar rendering
+- [SwiftBar](https://github.com/swiftbar/SwiftBar) — menu bar rendering
 - [ccusage](https://github.com/ryoppippi/ccusage) — Claude Code usage aggregation
 
 ## License
