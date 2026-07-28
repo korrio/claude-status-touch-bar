@@ -109,12 +109,74 @@ function fetchQuota() {
     };
     fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
     fs.writeFileSync(cacheFile, JSON.stringify(quota));
+    appendQuotaHistory(quota);
     return quota;
   } catch {
     // Stale cache beats nothing if the network is down.
     try { return JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch {}
     return null;
   }
+}
+
+// Rolling quota history (percentages only) so the desktop widget can draw
+// utilization as a line chart. One sample per fresh API fetch (~1/min while
+// any widget is refreshing); pruned to 7 days once the file grows.
+const HISTORY_FILE = path.join(
+  os.homedir(), '.cache', 'claude-touchbar', 'quota-history.jsonl'
+);
+
+function appendQuotaHistory(quota) {
+  try {
+    const sample = { t: Date.now(), five: quota.fiveHour.pct, seven: quota.sevenDay.pct };
+    if (quota.scoped && quota.scoped.length) {
+      sample.sc = {};
+      for (const s of quota.scoped) sample.sc[s.model] = s.pct;
+    }
+    fs.appendFileSync(HISTORY_FILE, JSON.stringify(sample) + '\n');
+    if (fs.statSync(HISTORY_FILE).size > 512 * 1024) {
+      const cutoff = Date.now() - 7 * 86400000;
+      const kept = fs
+        .readFileSync(HISTORY_FILE, 'utf8')
+        .split('\n')
+        .filter((l) => {
+          try { return JSON.parse(l).t >= cutoff; } catch { return false; }
+        });
+      fs.writeFileSync(HISTORY_FILE, kept.join('\n') + '\n');
+    }
+  } catch {}
+}
+
+// Samples since `since`, averaged into `bucketMs` buckets to keep the
+// widget payload small.
+function readQuotaHistory(since, bucketMs) {
+  let samples = [];
+  try {
+    samples = fs
+      .readFileSync(HISTORY_FILE, 'utf8')
+      .split('\n')
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((s) => s && s.t >= since && s.five != null && s.seven != null);
+  } catch { return []; }
+  const buckets = new Map();
+  for (const s of samples) {
+    const k = Math.floor(s.t / bucketMs);
+    const b = buckets.get(k) || { t: 0, five: 0, seven: 0, sc: {}, scN: {}, n: 0 };
+    b.t += s.t; b.five += s.five; b.seven += s.seven; b.n++;
+    for (const [m, v] of Object.entries(s.sc || {})) {
+      b.sc[m] = (b.sc[m] || 0) + v;
+      b.scN[m] = (b.scN[m] || 0) + 1;
+    }
+    buckets.set(k, b);
+  }
+  return [...buckets.values()]
+    .map((b) => {
+      const out = { t: Math.round(b.t / b.n), five: b.five / b.n, seven: b.seven / b.n };
+      const sc = {};
+      for (const m of Object.keys(b.sc)) sc[m] = b.sc[m] / b.scN[m];
+      if (Object.keys(sc).length) out.sc = sc;
+      return out;
+    })
+    .sort((a, b) => a.t - b.t);
 }
 
 function minsUntil(iso) {
@@ -372,6 +434,7 @@ try {
       JSON.stringify({
         generatedAt: now,
         quota: fetchQuota(),
+        quotaHistory: readQuotaHistory(start, 5 * 60 * 1000),
         bins,
         block: block && {
           cost: block.costUSD,

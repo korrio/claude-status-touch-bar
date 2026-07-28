@@ -8,6 +8,22 @@ export const command =
 
 export const refreshFrequency = 60 * 1000;
 
+// The quota line chart starts collapsed (one header line) to save space;
+// clicking the PLAN QUOTA header toggles it. Needs "Interaction" enabled
+// in the Übersicht menu-bar menu for clicks to reach the widget.
+export const initialState = { output: "", chartOpen: false };
+
+export const updateState = (event, prev) => {
+  switch (event.type) {
+    case "UB/COMMAND_RAN":
+      return Object.assign({}, prev, { output: event.output });
+    case "TOGGLE_CHART":
+      return Object.assign({}, prev, { chartOpen: !prev.chartOpen });
+    default:
+      return prev;
+  }
+};
+
 // Fixed model→hue assignment (validated categorical palette, dark surface).
 // Color follows the model, never its rank in the current window.
 const MODEL_HUES = [
@@ -48,6 +64,44 @@ const hueFor = (family) => {
   return OTHER_HUE;
 };
 
+// Quota line chart series colors (same validated palette).
+const QUOTA_COLORS = ["#3987e5", "#199e70", "#c98500", "#e66767"];
+
+// Catmull-Rom → cubic bezier, for smooth quota lines.
+const smoothPath = (pts) => {
+  if (pts.length < 2) return "";
+  let p = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    p +=
+      ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)}` +
+      ` ${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)},` +
+      ` ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)}` +
+      ` ${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)},` +
+      ` ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return p;
+};
+
+// Split a series into segments wherever sampling gapped (Mac asleep, app
+// closed) so the line doesn't lie across the gap.
+const segment = (pts, maxGapMs) => {
+  const segs = [];
+  let cur = [];
+  for (const p of pts) {
+    if (cur.length && p.t - cur[cur.length - 1].t > maxGapMs) {
+      if (cur.length >= 2) segs.push(cur);
+      cur = [];
+    }
+    cur.push(p);
+  }
+  if (cur.length >= 2) segs.push(cur);
+  return segs;
+};
+
 const fmtTok = (n) =>
   n >= 1e9 ? (n / 1e9).toFixed(1) + "B"
   : n >= 1e6 ? (n / 1e6).toFixed(1) + "M"
@@ -63,7 +117,7 @@ const hhmm = (t) => {
   );
 };
 
-export const render = ({ output }) => {
+export const render = ({ output, chartOpen }, dispatch) => {
   let d = null;
   try { d = JSON.parse(output); } catch (e) {}
   if (!d || !d.bins) {
@@ -91,6 +145,44 @@ export const render = ({ output }) => {
     bins.some((b) => b.perFamily[f])
   );
 
+  // Quota history → line chart series, sharing the bars' 24h time domain.
+  const domainStart = bins.length ? bins[0].t : Date.now() - 86400000;
+  const domainMs = 48 * 30 * 60 * 1000;
+  const qh = (d.quotaHistory || []).filter((s) => s.t >= domainStart);
+  const scopedNames = [];
+  for (const s of qh)
+    for (const m of Object.keys(s.sc || {}))
+      if (scopedNames.indexOf(m) < 0) scopedNames.push(m);
+  const series = [
+    { label: "5H", pts: qh.map((s) => ({ t: s.t, v: s.five })) },
+    { label: "7D", pts: qh.map((s) => ({ t: s.t, v: s.seven })) },
+  ]
+    .concat(
+      scopedNames.map((m) => ({
+        label: m.toUpperCase() + " 7D",
+        pts: qh
+          .filter((s) => (s.sc || {})[m] != null)
+          .map((s) => ({ t: s.t, v: s.sc[m] })),
+      }))
+    )
+    .map((s, i) =>
+      Object.assign({}, s, { color: QUOTA_COLORS[i % QUOTA_COLORS.length] })
+    )
+    .filter((s) => s.pts.length >= 2);
+  const showChart = series.length > 0;
+  // Current values for the chart header (live quota beats last sample).
+  const qNow = d.quota || {};
+  const headerVals = showChart
+    ? series.map((s) => {
+        let v = s.pts[s.pts.length - 1].v;
+        if (s.label === "5H" && qNow.fiveHour && qNow.fiveHour.pct != null)
+          v = qNow.fiveHour.pct;
+        if (s.label === "7D" && qNow.sevenDay && qNow.sevenDay.pct != null)
+          v = qNow.sevenDay.pct;
+        return { label: s.label, color: s.color, v };
+      })
+    : [];
+
   // 5H bar: real plan quota when available, else elapsed time in the block.
   const q5 = d.quota && d.quota.fiveHour;
   let blockFrac = 0;
@@ -99,7 +191,9 @@ export const render = ({ output }) => {
     blockFrac = Math.max(0, Math.min(1, q5.pct / 100));
     const r = Date.parse(q5.resetsAt);
     const mins = Math.max(0, Math.round((r - Date.now()) / 60000));
-    resetLabel = `quota ${Math.round(q5.pct)}% · resets ${hhmm(r)} · ${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")} left`;
+    // The chart header already carries the percentage once it has data.
+    const pctLabel = showChart ? "" : `quota ${Math.round(q5.pct)}% · `;
+    resetLabel = `${pctLabel}resets ${hhmm(r)} · ${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")} left`;
   } else if (d.block) {
     const s = Date.parse(d.block.startTime);
     const e = Date.parse(d.block.endTime);
@@ -150,6 +244,142 @@ export const render = ({ output }) => {
           </div>
         </div>
       )}
+
+      {/* plan quota — collapsed to one line by default; the header toggles
+          a smooth line chart auto-zoomed to available history */}
+      {showChart && (() => {
+        const W = 304;
+        const H = 72;
+        const PAD_T = 8;
+        // X: from the first sample to the last (min 45 min, max 24 h), so
+        // the chart fills the full width even with young history.
+        const lastT = qh[qh.length - 1].t;
+        const firstT = Math.max(qh[0].t, lastT - 86400000);
+        const span = Math.max(10 * 60 * 1000, lastT - firstT);
+        const x0 = lastT - span;
+        const x = (t) => Math.max(0, Math.min(W, ((t - x0) / span) * W));
+        // Y: auto-scale to the data (nice 25/50/75/100 ceiling) so low
+        // percentages still draw as visible lines.
+        const vMax = Math.max(
+          1,
+          ...series.map((s) => Math.max(...s.pts.map((p) => p.v)))
+        );
+        const yMax = Math.min(100, Math.max(25, Math.ceil((vMax * 1.15) / 25) * 25));
+        const y = (v) =>
+          H - Math.max(0, Math.min(yMax, v)) / yMax * (H - PAD_T);
+        return (
+          <div style={{ marginTop: 14 }}>
+            <div
+              onClick={() => dispatch({ type: "TOGGLE_CHART" })}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontSize: 10, letterSpacing: "0.08em", color: INK_MUTED }}>
+                PLAN QUOTA {chartOpen ? "▾" : "▸"}
+              </div>
+              <div style={{ fontSize: 10 }}>
+                {headerVals.map((h, i) => (
+                  <span key={h.label}>
+                    {i > 0 && <span style={{ color: INK_MUTED }}> · </span>}
+                    <span style={{ color: h.color, fontWeight: 600 }}>
+                      {h.label} {Math.round(h.v)}%
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            {chartOpen && (<div>
+            <svg
+              width="100%"
+              height={H}
+              viewBox={`0 0 ${W} ${H}`}
+              style={{ display: "block", marginTop: 4 }}
+            >
+              <defs>
+                {series.map((s) => (
+                  <linearGradient
+                    key={s.label}
+                    id={`qg-${s.label.replace(/\W/g, "")}`}
+                    x1="0" y1="0" x2="0" y2="1"
+                  >
+                    <stop offset="0%" stopColor={s.color} stopOpacity="0.28" />
+                    <stop offset="100%" stopColor={s.color} stopOpacity="0.02" />
+                  </linearGradient>
+                ))}
+              </defs>
+              {[0.25, 0.5, 0.75].map((f) => (
+                <line
+                  key={f}
+                  x1="0" x2={W} y1={y(f * yMax)} y2={y(f * yMax)}
+                  stroke={HAIRLINE}
+                  strokeWidth="1"
+                  strokeDasharray="2 4"
+                />
+              ))}
+              <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke={TRACK} strokeWidth="1" />
+              {series.map((s) =>
+                segment(s.pts, 30 * 60 * 1000).map((seg, i) => {
+                  const pts = seg.map((p) => [x(p.t), y(p.v)]);
+                  const line = smoothPath(pts);
+                  const area =
+                    line +
+                    ` L ${pts[pts.length - 1][0].toFixed(1)} ${y(0)}` +
+                    ` L ${pts[0][0].toFixed(1)} ${y(0)} Z`;
+                  return (
+                    <g key={`${s.label}-${i}`}>
+                      <path d={area} fill={`url(#qg-${s.label.replace(/\W/g, "")})`} />
+                      <path
+                        d={line}
+                        fill="none"
+                        stroke={s.color}
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                  );
+                })
+              )}
+              {/* live endpoint dots */}
+              {series.map((s) => {
+                const last = s.pts[s.pts.length - 1];
+                return (
+                  <circle
+                    key={s.label}
+                    cx={x(last.t)}
+                    cy={y(last.v)}
+                    r="2.4"
+                    fill={s.color}
+                  />
+                );
+              })}
+              <text x={W - 2} y={y(yMax * 0.5) - 3} textAnchor="end" fontSize="8" fill={INK_MUTED}>
+                {Math.round(yMax * 0.5)}%
+              </text>
+              <text x={W - 2} y={y(yMax) + 8} textAnchor="end" fontSize="8" fill={INK_MUTED}>
+                {yMax}%
+              </text>
+            </svg>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 9,
+                color: INK_MUTED,
+                marginTop: 2,
+              }}
+            >
+              <span>{hhmm(x0)}</span>
+              <span>now</span>
+            </div>
+            </div>)}
+          </div>
+        );
+      })()}
 
       {/* 24h stacked bars */}
       <div style={{ position: "relative", marginTop: 12 }}>
@@ -266,7 +496,7 @@ export const render = ({ output }) => {
           }}
         >
           7D&nbsp;&nbsp;
-          {d.quota && d.quota.sevenDay && d.quota.sevenDay.pct != null
+          {!showChart && d.quota && d.quota.sevenDay && d.quota.sevenDay.pct != null
             ? `${Math.round(d.quota.sevenDay.pct)}% of plan · `
             : ""}
           {fmtCost(d.week.cost)} · {fmtTok(d.week.tokens)} tokens

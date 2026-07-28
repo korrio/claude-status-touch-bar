@@ -4,9 +4,9 @@ Live **Claude Code** usage status on the MacBook Pro Touch Bar — and in the
 macOS menu bar via SwiftBar.
 
 ```
-┌─────┬──────┐  ┌────────────────────────────┬────────────────┬────────────────────────┐  ┌────┬───────┐
-│ esc │ dock │  │ 5H ████░░░░ 45% $48 ⏳1h40 │ 7D $365 · 664M │ ✳ fable-5 ███░ 161K/200K │  │ 🔊 │ 11:39 │
-└─────┴──────┘  └────────────────────────────┴────────────────┴────────────────────────┘  └────┴───────┘
+┌──────────────┐  ┌────────────────────────────┬────────────────┬────────────────────────┐  ┌───────┐
+│ ☀ ────────── │  │ 5H ████░░░░ 45% $48 ⏳1h40 │ 7D $365 · 664M │ ✳ fable-5 ███░ 161K/200K │  │ 11:39 │
+└──────────────┘  └────────────────────────────┴────────────────┴────────────────────────┘  └───────┘
 ```
 
 Inspired by [codex-status-touch-bar](https://github.com/binlabongbom/codex-status-touch-bar),
@@ -52,11 +52,14 @@ Refresh
 
 A floating desktop card — the equivalent of the Codex project's WidgetKit
 widget, built with [Übersicht](https://tracesof.net/uebersicht/) instead of
-Swift: hero block cost with a 5-hour progress bar, a **24-hour activity graph**
-(48 half-hour bars, stacked and colored per model — fable blue, opus aqua,
-sonnet yellow, haiku red; the palette is colorblind-validated), local-time
-markers, a model legend, and the 7-day footer. It refreshes every minute from
-a 5-minute data cache.
+Swift: hero block cost with a 5-hour progress bar, a **plan-quota line chart**
+(5H, 7D and per-model weekly utilization drawn as smooth colored lines —
+quota is sampled about once a minute into `~/.cache/claude-touchbar/`
+`quota-history.jsonl`, so the chart fills in after a few minutes of use), a
+**24-hour activity graph** (48 half-hour bars, stacked and colored per model —
+fable blue, opus aqua, sonnet yellow, haiku red; the palette is
+colorblind-validated), local-time markers, a model legend, and the 7-day
+footer. It refreshes every minute from a 5-minute data cache.
 
 ## Requirements
 
@@ -189,8 +192,9 @@ docs/README.th.md         Thai documentation
   widgets degrade to local estimates if it does.
 - The model name comes from the tail of the most recently active session log,
   i.e. the last model used anywhere, not per-project.
-- MTMR replaces the system Touch Bar layout; the merged preset keeps
-  escape/brightness/volume/clock, but app-specific system buttons go away.
+- MTMR replaces the system Touch Bar layout; the default preset keeps a
+  brightness slider and the clock, but app-specific system buttons (and the
+  hardware esc key rendering) go away.
 
 ## Credits
 

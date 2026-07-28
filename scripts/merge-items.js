@@ -42,7 +42,7 @@ const widgets = [
     refreshInterval: 30,
     source: { filePath: path.join(LAUNCHERS, 'block.sh') },
     align: 'right',
-    bordered: true,
+    bordered: false,
     actions: [tapAction],
   },
   {
@@ -50,7 +50,7 @@ const widgets = [
     refreshInterval: 300,
     source: { filePath: path.join(LAUNCHERS, 'week.sh') },
     align: 'right',
-    bordered: true,
+    bordered: false,
     actions: [tapAction],
   },
   {
@@ -58,15 +58,18 @@ const widgets = [
     refreshInterval: 30,
     source: { filePath: path.join(LAUNCHERS, 'context.sh') },
     align: 'right',
-    bordered: true,
+    bordered: false,
     actions: [tapAction],
   },
 ];
 
 // A minimal, sane preset used only when MTMR has no items.json yet.
+// Brightness is exposed as up/down key buttons, not the "brightness"
+// slider: the slider drives a legacy display API that silently fails on
+// Apple Silicon (MTMR runs under Rosetta), while the key buttons work.
 const defaultPreset = [
-  { type: 'escape', width: 110 },
-  { type: 'dock', align: 'left' },
+  { type: 'brightnessDown', align: 'left', width: 60 },
+  { type: 'brightnessUp', align: 'left', width: 60 },
   { type: 'timeButton', formatTemplate: 'HH:mm', align: 'right' },
 ];
 
@@ -82,6 +85,43 @@ if (fs.existsSync(ITEMS)) {
 // Drop any previous incarnation of our widgets (old repo paths included).
 const OURS = /claude-(status|week|touch)|claude-status-touch-bar/;
 items = items.filter((i) => !OURS.test(JSON.stringify(i)));
+
+// Optional: 3 random sticker images next to the brightness buttons.
+// Populated by scripts/fetch-sticons.sh into the runtime dir (the images
+// are personal-use downloads and are never committed to the repo).
+// Re-run this script to reshuffle the pick.
+try {
+  const STICONS = path.join(RUNTIME, 'sticons', 'small');
+  const pool = fs.readdirSync(STICONS).filter((f) => f.endsWith('.png'));
+  const pick = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+  const at = items.findIndex((i) => i.type === 'brightnessUp') + 1;
+  items.splice(
+    at > 0 ? at : items.length,
+    0,
+    ...pick.map((f, idx) => ({
+      type: 'staticButton',
+      title: '',
+      image: { filePath: path.join(STICONS, f) },
+      align: 'left',
+      width: 34,
+      bordered: false,
+      // Tap → swap this slot for another random image (MTMR hot-reloads
+      // items.json on save, so it changes in place).
+      actions: [
+        {
+          trigger: 'singleTap',
+          action: 'shellScript',
+          executablePath: '/bin/bash',
+          shellArguments: [
+            path.join(RUNTIME, 'scripts', 'shuffle-sticon.sh'),
+            String(idx),
+          ],
+        },
+      ],
+    }))
+  );
+} catch {}
+
 items.push(...widgets);
 
 fs.writeFileSync(ITEMS, JSON.stringify(items, null, 2) + '\n');
