@@ -207,11 +207,20 @@ export const render = ({ output, chartOpen }, dispatch) => {
   return (
     <div>
       {/* header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontSize: 11, letterSpacing: "0.08em", color: INK_MUTED }}>
           CLAUDE CODE
         </div>
-        <div style={{ fontSize: 11, color: INK_MUTED }}>last 24h</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 11, color: INK_MUTED }}>last 24h</div>
+          {/* Anthropic symbol, white */}
+          <svg width="32" height="22.6" viewBox="0 0 92.2 65" aria-label="Anthropic">
+            <path
+              fill={INK}
+              d="M66.5,0H52.4l25.7,65h14.1L66.5,0z M25.7,0L0,65h14.4l5.3-13.6h26.9L51.8,65h14.4L40.5,0C40.5,0,25.7,0,25.7,0z M24.3,39.3l8.8-22.8l8.8,22.8H24.3z"
+            />
+          </svg>
+        </div>
       </div>
 
       {/* hero: active block */}
