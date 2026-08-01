@@ -10,6 +10,8 @@ macOS จึงไม่พังเมื่ออัปเดต macOS แล�
 
 ## Widget บน Touch Bar
 
+![Touch Bar](images/touchbar.png)
+
 มี 3 ส่วนทางขวาของ Touch Bar (ออกแบบตามโปรเจกต์ Codex: 5H / 7D / SESSION / MODEL):
 
 | Widget | ตัวอย่าง | ความหมาย |
@@ -30,6 +32,8 @@ burn rate, ค่าคาดการณ์, โมเดลที่ใช้,
 ให้อัตโนมัติ
 
 ## Widget บนหน้าจอ (Übersicht)
+
+<img src="images/widget.png" width="400" alt="Widget บนหน้าจอ">
 
 การ์ดลอยบน desktop — เทียบเท่า widget แบบ WidgetKit ของโปรเจกต์ Codex
 แต่สร้างด้วย [Übersicht](https://tracesof.net/uebersicht/) แทน Swift:

@@ -3,11 +3,7 @@
 Live **Claude Code** usage status on the MacBook Pro Touch Bar — and in the
 macOS menu bar via SwiftBar.
 
-```
-┌──────────────┐  ┌────────────────────────────┬────────────────┬────────────────────────┐  ┌───────┐
-│ ☀ ────────── │  │ 5H ████░░░░ 45% $48 ⏳1h40 │ 7D $365 · 664M │ ✳ fable-5 ███░ 161K/200K │  │ 11:39 │
-└──────────────┘  └────────────────────────────┴────────────────┴────────────────────────┘  └───────┘
-```
+![Touch Bar](docs/images/touchbar.png)
 
 Inspired by [codex-status-touch-bar](https://github.com/binlabongbom/codex-status-touch-bar),
 which does this for OpenAI Codex with a native Swift app. This project takes a
@@ -49,6 +45,8 @@ Refresh
 ```
 
 ### Desktop widget (Übersicht)
+
+<img src="docs/images/widget.png" width="400" alt="Desktop widget — cost, quota chart, 24h activity and the tamaclaude pet (here hammering through a Bash run)">
 
 A floating desktop card — the equivalent of the Codex project's WidgetKit
 widget, built with [Übersicht](https://tracesof.net/uebersicht/) instead of
