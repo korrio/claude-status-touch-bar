@@ -46,6 +46,9 @@ rsync -a --delete "$DIR/ubersicht/claude-status.widget" "$WIDGETS/"
 echo "==> Merging Claude widgets into MTMR items.json"
 CLAUDE_TOUCH_RUNTIME="$RUNTIME" node "$DIR/scripts/merge-items.js"
 
+echo "==> Installing Claude Code hooks for the desktop pet"
+CLAUDE_TOUCH_RUNTIME="$RUNTIME" node "$DIR/scripts/install-pet-hooks.js"
+
 echo "==> Configuring SwiftBar menu bar plugin"
 EXISTING="$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || true)"
 if [ -z "$EXISTING" ] || [[ "$EXISTING" == *claude* ]]; then

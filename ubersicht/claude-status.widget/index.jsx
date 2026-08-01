@@ -3,10 +3,16 @@
 // 5-hour block summary, and rolling 7-day totals. Data comes from the
 // shared status layer's `graph` mode (cached 5 min).
 
-export const command =
-  "$HOME/.local/share/claude-status-touch-bar/scripts/claude-status.sh graph";
+import { PET_PALETTE, PET_BOX, PET_STATES } from "./lib/pet-frames.js";
 
-export const refreshFrequency = 60 * 1000;
+// widget-data.sh = graph mode (served from its 5-min cache) + the live pet
+// state, so the fast refresh below only costs a bash spawn and two cats.
+export const command =
+  "$HOME/.local/share/claude-status-touch-bar/scripts/widget-data.sh";
+
+// Fast refresh keeps the pet reacting to Claude Code hook events within
+// ~2s; the heavy data underneath is still cached by the status layer.
+export const refreshFrequency = 2 * 1000;
 
 // The quota line chart starts collapsed (one header line) to save space;
 // clicking the PLAN QUOTA header toggles it. Needs "Interaction" enabled
@@ -100,6 +106,66 @@ const segment = (pts, maxGapMs) => {
   }
   if (cur.length >= 2) segs.push(cur);
   return segs;
+};
+
+// --- tamaclaude pet ---------------------------------------------------------
+// Mascot by tamaclaude (github.com/thaitop/tamaclaude, MIT). Each state is
+// 12 pre-rendered frames of rounded rects; frame switching is a CSS opacity
+// animation phase-locked to the wall clock, so the 2s re-renders never
+// stutter the loop.
+const PET_T = 1200; // ms per animation loop
+
+const petVisualState = (pet) => {
+  if (!pet || !pet.state || !PET_STATES[pet.state]) return "sleeping";
+  const age = Date.now() - (pet.t || 0);
+  let s = pet.state;
+  if (s === "celebrate" && age > 8000) s = "waiting"; // party's over, now waiting on you
+  if (s === "alert" && age > 3 * 60000) s = "waiting";
+  if (age > 10 * 60000) s = "sleeping"; // stale state = session gone quiet
+  return s;
+};
+
+const Pet = ({ state, height }) => {
+  const frames = PET_STATES[state] || PET_STATES.idle;
+  const n = frames.length;
+  const [bx0, by0, bx1, by1] = PET_BOX;
+  const now = Date.now();
+  const cur = Math.floor(((now % PET_T) / PET_T) * n) % n;
+  return (
+    <svg
+      width={(height * (bx1 - bx0)) / (by1 - by0)}
+      height={height}
+      viewBox={`${bx0} ${by0} ${bx1 - bx0} ${by1 - by0}`}
+      style={{ display: "block", overflow: "visible" }}
+    >
+      <style>{`@keyframes tcpetf { 0%, ${(100 / n - 0.04).toFixed(2)}% { opacity: 1 } ${(100 / n).toFixed(2)}%, 100% { opacity: 0 } }`}</style>
+      {frames.map((rects, k) => {
+        // Negative delay aligns frame k's visible window to wall-clock
+        // phase slot k, keeping playback continuous across re-renders.
+        let delay = (k * PET_T) / n - (now % PET_T);
+        if (delay > 0) delay -= PET_T;
+        return (
+          <g
+            key={k}
+            style={{
+              opacity: k === cur ? 1 : 0,
+              animation: `tcpetf ${PET_T}ms linear infinite`,
+              animationDelay: `${Math.round(delay)}ms`,
+            }}
+          >
+            {rects.map(([x, y, w, h, c, r], j) => (
+              <rect
+                key={j}
+                x={x} y={y} width={w} height={h}
+                rx={r || 0}
+                fill={PET_PALETTE[c]}
+              />
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
 };
 
 const fmtTok = (n) =>
@@ -203,6 +269,7 @@ export const render = ({ output, chartOpen }, dispatch) => {
   }
 
   const PLOT_H = 56;
+  const petState = petVisualState(d.pet);
 
   return (
     <div>
@@ -223,36 +290,46 @@ export const render = ({ output, chartOpen }, dispatch) => {
         </div>
       </div>
 
-      {/* hero: active block */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
-        <div style={{ fontSize: 26, fontWeight: 600 }}>
-          {d.block ? fmtCost(d.block.cost) : "idle"}
-        </div>
-        {d.block && (
-          <div style={{ fontSize: 12, color: INK_SECONDARY }}>
-            {fmtTok(d.block.tokens)} tokens this block
+      {/* hero: active block, with the tamaclaude pet on the right */}
+      <div style={{ display: "flex", gap: 12, marginTop: 6, alignItems: "flex-end" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div style={{ fontSize: 26, fontWeight: 600 }}>
+              {d.block ? fmtCost(d.block.cost) : "idle"}
+            </div>
+            {d.block && (
+              <div style={{ fontSize: 12, color: INK_SECONDARY }}>
+                {fmtTok(d.block.tokens)} tokens this block
+              </div>
+            )}
           </div>
-        )}
+          {d.block && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ height: 4, borderRadius: 2, background: TRACK }}>
+                <div
+                  style={{
+                    width: `${blockFrac * 100}%`,
+                    height: 4,
+                    borderRadius: 2,
+                    background: "#3987e5",
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 10, color: INK_MUTED, marginTop: 3 }}>
+                5H · {resetLabel}
+                {d.block.projectedCost != null &&
+                  ` · projected ${fmtCost(d.block.projectedCost)}`}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: "center", flexShrink: 0 }}>
+          <Pet state={petState} height={46} />
+          <div style={{ fontSize: 8, color: INK_MUTED, marginTop: 1 }}>
+            {petState}
+          </div>
+        </div>
       </div>
-      {d.block && (
-        <div style={{ marginTop: 6 }}>
-          <div style={{ height: 4, borderRadius: 2, background: TRACK }}>
-            <div
-              style={{
-                width: `${blockFrac * 100}%`,
-                height: 4,
-                borderRadius: 2,
-                background: "#3987e5",
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 10, color: INK_MUTED, marginTop: 3 }}>
-            5H · {resetLabel}
-            {d.block.projectedCost != null &&
-              ` · projected ${fmtCost(d.block.projectedCost)}`}
-          </div>
-        </div>
-      )}
 
       {/* plan quota — collapsed to one line by default; the header toggles
           a smooth line chart auto-zoomed to available history */}

@@ -59,7 +59,18 @@ quota is sampled about once a minute into `~/.cache/claude-touchbar/`
 **24-hour activity graph** (48 half-hour bars, stacked and colored per model —
 fable blue, opus aqua, sonnet yellow, haiku red; the palette is
 colorblind-validated), local-time markers, a model legend, and the 7-day
-footer. It refreshes every minute from a 5-minute data cache.
+footer. It refreshes every couple of seconds from a 5-minute data cache.
+
+The card also hosts a **[tamaclaude](https://github.com/thaitop/tamaclaude)
+desk pet** — the blocky orange mascot reacts live to what Claude Code is
+doing: reads with a magnifier, types on a laptop, hammers during Bash runs,
+searches with a globe, signals on MCP calls, celebrates when a task
+finishes, waits with a clock, and falls asleep when you stop working.
+Claude Code hooks (installed by `node scripts/install-pet-hooks.js`, merged
+non-destructively into `~/.claude/settings.json`) write the current state to
+`~/.cache/claude-touchbar/pet-state.json`; the widget animates the matching
+pre-rendered frames (`scripts/gen-pet-frames.py` bakes them from a
+tamaclaude checkout — the mascot artwork is MIT, © Uthai Moolpak).
 
 ## Requirements
 
@@ -203,6 +214,9 @@ docs/README.th.md         Thai documentation
 - [SwiftBar](https://github.com/swiftbar/SwiftBar) — menu bar rendering
 - [Übersicht](https://tracesof.net/uebersicht/) — desktop widget rendering
 - [ccusage](https://github.com/ryoppippi/ccusage) — Claude Code usage aggregation
+- [tamaclaude](https://github.com/thaitop/tamaclaude) — the desk-pet mascot
+  (MIT, © Uthai Moolpak); its rect-list frames are baked into the widget by
+  `scripts/gen-pet-frames.py`
 
 ## License
 
