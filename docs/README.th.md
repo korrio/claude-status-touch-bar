@@ -54,6 +54,30 @@ legend ชื่อโมเดล และยอดรวม 7 วันด้
 `node scripts/install-pet-hooks.js` (merge เข้า `~/.claude/settings.json`
 โดยไม่แตะ hook เดิม) ภาพมาสคอตเป็นสัญญา MIT © Uthai Moolpak
 
+### สถานะทั้งหมดของสัตว์เลี้ยง
+
+![สถานะทั้งหมดของ tamaclaude](images/pet-states.png)
+
+hook แต่ละ event เขียนสถานะลง `~/.cache/claude-touchbar/pet-state.json`
+แล้ว widget อ่านทุก 2 วินาที พร้อมกติกาตามอายุของสถานะ:
+
+| สถานะ | ตัวกระตุ้น |
+|---|---|
+| `idle` | เปิด session ใหม่ (`SessionStart`) |
+| `thinking` | ส่ง prompt (`UserPromptSubmit`) หรือ tool ที่ไม่เข้าตารางไหน |
+| `reading` | `Read` / `Grep` / `Glob` |
+| `writing` | `Edit` / `Write` / `NotebookEdit` / `TodoWrite` |
+| `building` | `Bash` |
+| `searching` | `WebSearch` / `WebFetch` |
+| `beacon` | tool ของ MCP (`mcp__*`) — คุยกับบริการภายนอก |
+| `alert` | `Notification` — Claude รอคุณตอบ/ขอสิทธิ์ |
+| `celebrate` | `Stop` — งานเสร็จ (โชว์ 8 วินาทีแล้วเปลี่ยนเป็น `waiting`) |
+| `waiting` | หลัง celebrate หรือ alert ที่ค้างเกิน 3 นาที |
+| `sleeping` | `SessionEnd` หรือไม่มี event เกิน 10 นาที |
+| `error` | ท่า `x_x` จาก tamaclaude — ยังไม่ผูกกับ hook (สำรองไว้) |
+
+แก้ตาราง tool→สถานะได้ที่ `case` เดียวใน `scripts/pet-hook.sh`
+
 ## เปอร์เซ็นต์โควตามาจากไหน
 
 เปอร์เซ็นต์ 5H/7D ดึงจาก **OAuth usage API ของ Anthropic**

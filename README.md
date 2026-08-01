@@ -70,6 +70,40 @@ non-destructively into `~/.claude/settings.json`) write the current state to
 pre-rendered frames (`scripts/gen-pet-frames.py` bakes them from a
 tamaclaude checkout — the mascot artwork is MIT, © Uthai Moolpak).
 
+#### All pet states
+
+![All tamaclaude pet states](docs/images/pet-states.png)
+
+The pet is a pure function of the last hook event: every event maps to one
+of 12 visual states (a tamaclaude *mood* + *prop* combination), written as
+`{"state": "...", "t": <ms>}` to `pet-state.json`. The widget re-reads it
+every 2 s and derives what to show from the state **and its age**, so
+short-lived moments (celebrating) and abandoned sessions (asleep) resolve
+without any daemon:
+
+| State | Mascot | Trigger (hook event → `scripts/pet-hook.sh`) |
+|---|---|---|
+| `idle` | standing, blinking | `SessionStart` — a session just opened |
+| `thinking` | thought dots | `UserPromptSubmit` — prompt sent, Claude is reasoning; also the fallback for unmapped tools (`Task`, `Agent`, `Workflow`, `Skill`, …) |
+| `reading` | magnifying glass over one eye | `PreToolUse`: `Read`, `Grep`, `Glob`, `NotebookRead` |
+| `writing` | glasses, typing on a laptop | `PreToolUse`: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `TodoWrite` |
+| `building` | hard hat, hammering an anvil | `PreToolUse`: `Bash`, `BashOutput`, `KillShell` |
+| `searching` | globe overhead | `PreToolUse`: `WebSearch`, `WebFetch` |
+| `beacon` | arms raised, antenna signalling | `PreToolUse`: any `mcp__*` tool, `LSP`, MCP resource tools — talking to an external service |
+| `alert` | wide eyes, exclamation mark | `Notification` — Claude needs you (permission prompt / waiting for input) |
+| `celebrate` | happy `^ ^` eyes, sparkles | `Stop` — the task finished |
+| `waiting` | floating clock | derived: `celebrate` older than 8 s, or `alert` older than 3 min — done and waiting for your next prompt |
+| `sleeping` | dimmed, sitting, zzz | `SessionEnd`, or **any** state older than 10 min (stale = session gone quiet); also the default when no state file exists |
+| `error` | `x_x` eyes, slumped | in the frame set (tamaclaude's error pose), not yet wired to a hook — reserved for a future failure signal |
+
+Because the hooks fire on every event in every session, the pet always
+mirrors the **most recent** activity across all concurrent Claude Code
+sessions (last writer wins). The tool→state table lives in a single `case`
+block in `scripts/pet-hook.sh` — edit it to remap tools (the same mapping
+tamaclaude's daemon uses by default). The state grid above is generated
+from the exact frame data the widget ships
+(`ubersicht/claude-status.widget/lib/pet-frames.js`).
+
 ## Requirements
 
 - MacBook Pro with a Touch Bar
